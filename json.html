@@ -1,0 +1,294 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>JSON 格式化 · Tools</title>
+<link rel="stylesheet" href="shell.css">
+</head>
+<body>
+<div class="app">
+  <nav class="side">
+    <div class="brand"><b>TOOLS</b> 工具箱</div>
+    <a href="index.html"><span class="tag">⌂</span>全部工具</a>
+    <a href="sql-in.html"><span class="tag">SQL</span>IN 转换器</a>
+    <a href="json.html" class="on"><span class="tag">{}</span>JSON 格式化</a>
+    <a href="url.html"><span class="tag">%</span>URL 转义</a>
+    <div class="foot">单文件 / 纯本地<br>无依赖 · 无上传</div>
+  </nav>
+
+  <main>
+    <h1>JSON <span>格式化</span></h1>
+    <div class="sub">美化 / 压缩 / 转义反转义 / 校验定位 / 生成 YAML·Go·Java·Python·TS</div>
+
+    <div class="bar">
+      <label>输出格式
+        <select id="mode">
+          <option value="pretty">JSON 美化</option>
+          <option value="min">JSON 压缩</option>
+          <option value="escape">转义为字符串</option>
+          <option value="unescape">反转义字符串</option>
+          <option value="yaml">YAML</option>
+          <option value="go">Go struct</option>
+          <option value="java">Java 类</option>
+          <option value="python">Python dataclass</option>
+          <option value="ts">TypeScript interface</option>
+        </select>
+      </label>
+      <label>缩进
+        <select id="indent">
+          <option value="2">2 空格</option>
+          <option value="4">4 空格</option>
+          <option value="tab">Tab</option>
+        </select>
+      </label>
+      <label><input type="checkbox" id="sortkey"> 按 key 排序</label>
+      <label>根类型名 <input type="text" id="root" value="Root" size="8"></label>
+    </div>
+
+    <div class="wrap">
+      <section class="pane">
+        <header><span>输入</span><b id="state">等待输入</b></header>
+        <textarea id="input" spellcheck="false" placeholder='{"id":1001,"tags":["a","b"],"ok":true}'></textarea>
+      </section>
+      <section class="pane">
+        <header><span>输出</span><button class="ghost" id="copy" style="padding:3px 12px;font-size:11px">复制</button></header>
+        <pre class="out" id="output"><em>实时转换…</em></pre>
+      </section>
+    </div>
+
+    <span class="status" id="status"></span>
+  </main>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const input = $('input'), output = $('output'), state = $('state'), status = $('status');
+
+const pad = () => $('indent').value === 'tab' ? '\t' : ' '.repeat(+$('indent').value);
+const cap = s => String(s).replace(/[^\w]+(\w)/g, (_, c) => c.toUpperCase()).replace(/^\w/, c => c.toUpperCase()) || 'Item';
+
+/* ---------- 解析 ---------- */
+function parse(text) {
+  let obj = JSON.parse(text);
+  if ($('sortkey').checked) obj = sortDeep(obj);
+  return obj;
+}
+function sortDeep(v) {
+  if (Array.isArray(v)) return v.map(sortDeep);
+  if (v && typeof v === 'object') {
+    const o = {};
+    for (const k of Object.keys(v).sort()) o[k] = sortDeep(v[k]);
+    return o;
+  }
+  return v;
+}
+// 把 "position 37" / "(line 3 column 5)" 变成人能看懂的位置
+function locate(text, err) {
+  const lineCol = /line (\d+) column (\d+)/.exec(err.message);
+  if (lineCol) return `第 ${lineCol[1]} 行 第 ${lineCol[2]} 列`;
+  const pos = /position (\d+)/.exec(err.message);
+  if (pos) {
+    const before = text.slice(0, +pos[1]);
+    return `第 ${before.split('\n').length} 行 第 ${pos[1] - before.lastIndexOf('\n')} 列`;
+  }
+  return '';
+}
+
+/* ---------- YAML ---------- */
+const yamlScalar = v => {
+  if (v === null) return 'null';
+  if (typeof v === 'string') {
+    const plain = /^[A-Za-z0-9_][\w\-.\/ ]*$/.test(v) && !/^(true|false|null|yes|no|on|off)$/i.test(v);
+    return plain ? v : JSON.stringify(v);
+  }
+  return String(v);
+};
+const yamlKey = k => /^[A-Za-z_][\w-]*$/.test(k) ? k : JSON.stringify(k);
+function yaml(v, p = '') {
+  const I = '  ';
+  if (Array.isArray(v)) {
+    if (!v.length) return '[]';
+    return v.map(x => {
+      if (x === null || typeof x !== 'object') return p + '- ' + yamlScalar(x);
+      const body = yaml(x, p + I).replace(new RegExp('^' + p + I), '');
+      return p + '- ' + body;
+    }).join('\n');
+  }
+  if (v && typeof v === 'object') {
+    const ks = Object.keys(v);
+    if (!ks.length) return '{}';
+    return ks.map(k => {
+      const x = v[k];
+      if (x === null || typeof x !== 'object') return p + yamlKey(k) + ': ' + yamlScalar(x);
+      if (!Object.keys(x).length) return p + yamlKey(k) + ': ' + (Array.isArray(x) ? '[]' : '{}');
+      return p + yamlKey(k) + ':\n' + yaml(x, p + I);
+    }).join('\n');
+  }
+  return p + yamlScalar(v);
+}
+
+/* ---------- Go ---------- */
+function goStruct(v, name, nested) {
+  const fields = Object.entries(v).map(([k, val]) =>
+    `\t${cap(k)} ${goType(val, name + cap(k), nested)} \`json:"${k}"\``);
+  return `type ${name} struct {\n${fields.join('\n')}\n}`;
+}
+function goType(v, name, nested) {
+  if (v === null) return 'interface{}';
+  if (Array.isArray(v)) return '[]' + (v.length ? goType(v[0], name + 'Item', nested) : 'interface{}');
+  if (typeof v === 'object') { nested.push(goStruct(v, name, nested)); return name; }
+  if (typeof v === 'number') return Number.isInteger(v) ? 'int64' : 'float64';
+  if (typeof v === 'boolean') return 'bool';
+  return 'string';
+}
+
+/* ---------- Java ---------- */
+const jid = s => String(s).replace(/[^\w$]/g, '_');
+function javaClass(v, name, nested) {
+  const fields = Object.entries(v).map(([k, val]) =>
+    `    private ${javaType(val, name + cap(k), nested)} ${jid(k)};`);
+  return `public class ${name} {\n${fields.join('\n')}\n}`;
+}
+function javaType(v, name, nested) {
+  if (v === null) return 'Object';
+  if (Array.isArray(v)) return 'List<' + (v.length ? javaType(v[0], name + 'Item', nested) : 'Object') + '>';
+  if (typeof v === 'object') { nested.push(javaClass(v, name, nested)); return name; }
+  if (typeof v === 'number') return Number.isInteger(v) ? 'long' : 'double';
+  if (typeof v === 'boolean') return 'boolean';
+  return 'String';
+}
+
+/* ---------- Python ---------- */
+const pid = s => String(s).replace(/[^\w]/g, '_');
+function pyClass(v, name, nested) {
+  const fields = Object.entries(v).map(([k, val]) =>
+    `    ${pid(k)}: ${pyType(val, name + cap(k), nested)}`);
+  return `@dataclass\nclass ${name}:\n${fields.join('\n')}`;
+}
+function pyType(v, name, nested) {
+  if (v === null) return 'Any';
+  if (Array.isArray(v)) return 'List[' + (v.length ? pyType(v[0], name + 'Item', nested) : 'Any') + ']';
+  if (typeof v === 'object') { nested.push(pyClass(v, name, nested)); return name; }
+  if (typeof v === 'number') return Number.isInteger(v) ? 'int' : 'float';
+  if (typeof v === 'boolean') return 'bool';
+  return 'str';
+}
+
+/* ---------- TypeScript ---------- */
+function tsInterface(v, name, nested) {
+  const fields = Object.entries(v).map(([k, val]) =>
+    `  ${/^[A-Za-z_$][\w$]*$/.test(k) ? k : JSON.stringify(k)}: ${tsType(val, name + cap(k), nested)};`);
+  return `export interface ${name} {\n${fields.join('\n')}\n}`;
+}
+function tsType(v, name, nested) {
+  if (v === null) return 'any';
+  if (Array.isArray(v)) return (v.length ? tsType(v[0], name + 'Item', nested) : 'any') + '[]';
+  if (typeof v === 'object') { nested.push(tsInterface(v, name, nested)); return name; }
+  if (typeof v === 'number') return 'number';
+  if (typeof v === 'boolean') return 'boolean';
+  return 'string';
+}
+
+// 统一：递归生成 [根定义, ...嵌套定义] 的字符串
+function typed(make, obj, name) {
+  const nested = [];
+  const root = make(obj, name, nested);
+  return [root, ...nested.reverse()].join('\n\n');
+}
+
+/* ---------- 主流程 ---------- */
+function render() {
+  const raw = input.value;
+  status.className = 'status';
+  if (!raw.trim()) { state.textContent = '等待输入'; output.innerHTML = '<em>实时转换…</em>'; return; }
+  const mode = $('mode').value;
+
+  if (mode === 'unescape') {
+    let s = raw.trim();
+    try { s = JSON.parse(s); }            // "{\"a\":1}" → {"a":1}
+    catch { s = s.replace(/\\(["'\\/bfnrtu])/g, (_, c) => ({ n: '\n', t: '\t', r: '\r', b: '\b', f: '\f' }[c] ?? c)); }
+    output.textContent = s;
+    state.textContent = s.length + ' 字符';
+    return;
+  }
+
+  let obj;
+  try { obj = parse(raw); }
+  catch (e) {
+    const at = locate(raw, e);
+    state.textContent = '✗ 非法 JSON';
+    output.innerHTML = '<em>解析失败，先修输入</em>';
+    status.textContent = (at ? at + ' · ' : '') + e.message.replace(/^JSON\.parse: /, '');
+    status.classList.add('on', 'err');
+    return;
+  }
+
+  const name = cap($('root').value.trim() || 'Root');
+  const I = pad();
+  const map = {
+    pretty: () => JSON.stringify(obj, null, I),
+    min: () => JSON.stringify(obj),
+    escape: () => JSON.stringify(JSON.stringify(obj)),
+    yaml: () => yaml(obj),
+    go: () => typed(goStruct, obj, name),
+    java: () => 'import java.util.List;\n\n' + typed(javaClass, obj, name),
+    python: () => 'from dataclasses import dataclass\nfrom typing import Any, List\n\n' + typed(pyClass, obj, name),
+    ts: () => typed(tsInterface, obj, name),
+  };
+  const text = map[mode]();
+  output.textContent = text;
+  state.textContent = '✓ 合法 JSON';
+  status.textContent = '已生成 · ' + text.length + ' 字符';
+  status.classList.add('on');
+}
+
+input.addEventListener('input', render);
+document.querySelectorAll('input,select').forEach(el => el.addEventListener('change', render));
+
+$('copy').addEventListener('click', async () => {
+  const text = output.textContent;
+  if (!text || text.startsWith('实时转换')) return;
+  try { await navigator.clipboard.writeText(text); }
+  catch {
+    const r = document.createRange(); r.selectNodeContents(output);
+    const sel = getSelection(); sel.removeAllRanges(); sel.addRange(r);
+    document.execCommand('copy'); sel.removeAllRanges();
+  }
+  status.className = 'status on';
+  status.textContent = '已复制';
+});
+
+// 自检：解析 / 定位 / 各生成器
+(function selfTest() {
+  const ok = (cond, msg, got) => console.assert(cond, msg, got);
+  input.value = '{"b":1,"a":[{"x":true}]}';
+  $('mode').value = 'pretty'; $('indent').value = '2'; $('sortkey').checked = true; render();
+  ok(output.textContent === '{\n  "a": [\n    {\n      "x": true\n    }\n  ],\n  "b": 1\n}', 'pretty+sort', output.textContent);
+
+  $('sortkey').checked = false;
+  $('mode').value = 'escape'; render();
+  ok(output.textContent === '"{\\"b\\":1,\\"a\\":[{\\"x\\":true}]}"', 'escape', output.textContent);
+  input.value = output.textContent; $('mode').value = 'unescape'; render();
+  ok(output.textContent === '{"b":1,"a":[{"x":true}]}', 'unescape', output.textContent);
+
+  input.value = '{"id":1001,"price":9.5,"ok":true,"tags":["a"],"owner":{"n":"z"},"nil":null}';
+  $('mode').value = 'go'; render();
+  ok(output.textContent.includes('type Root struct') && output.textContent.includes('`json:"id"`')
+    && output.textContent.includes('int64') && output.textContent.includes('float64')
+    && output.textContent.includes('[]string') && output.textContent.includes('type RootOwner struct'), 'go', output.textContent);
+  $('mode').value = 'java'; render(); ok(output.textContent.includes('private long id;'), 'java', output.textContent);
+  $('mode').value = 'python'; render(); ok(output.textContent.includes('class Root:') && output.textContent.includes('id: int'), 'python', output.textContent);
+  $('mode').value = 'ts'; render(); ok(output.textContent.includes('export interface Root') && output.textContent.includes('tags: string[];'), 'ts', output.textContent);
+  $('mode').value = 'yaml'; render();
+  ok(output.textContent === 'id: 1001\nprice: 9.5\nok: true\ntags:\n  - a\nowner:\n  n: z\nnil: null', 'yaml', output.textContent);
+
+  input.value = '{"a":1,}';
+  $('mode').value = 'pretty'; render();
+  ok(state.textContent === '✗ 非法 JSON' && status.classList.contains('err') && /^第 \d+ 行 第 \d+ 列/.test(status.textContent), 'error locate', status.textContent);
+
+  input.value = ''; $('sortkey').checked = true; render();
+})();
+</script>
+</body>
+</html>

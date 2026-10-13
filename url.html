@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>URL 转义 · Tools</title>
+<link rel="stylesheet" href="shell.css">
+<style>
+.q{width:100%; max-width:1180px; margin-top:16px}
+.q table{width:100%; border-collapse:collapse; background:var(--panel); border:1px solid var(--line); border-radius:10px; overflow:hidden}
+.q th,.q td{padding:8px 12px; border-bottom:1px solid var(--line); font-size:12px; text-align:left; word-break:break-all; vertical-align:top}
+.q th{color:var(--dim); font-weight:500; letter-spacing:.1em; font-size:11px; text-transform:uppercase; background:#121821}
+.q tr:last-child td{border-bottom:0}
+.q td.k{color:var(--accent2); white-space:nowrap; width:1%}
+.q td.v{color:var(--ink)}
+.q h3{font-size:12px; letter-spacing:.14em; text-transform:uppercase; color:var(--dim); margin:22px 0 8px; font-weight:500}
+.q .empty{color:var(--dim); font-size:12px; padding:12px}
+</style>
+</head>
+<body>
+<div class="app">
+  <nav class="side">
+    <div class="brand"><b>TOOLS</b> 工具箱</div>
+    <a href="index.html"><span class="tag">⌂</span>全部工具</a>
+    <a href="sql-in.html"><span class="tag">SQL</span>IN 转换器</a>
+    <a href="json.html"><span class="tag">{}</span>JSON 格式化</a>
+    <a href="url.html" class="on"><span class="tag">%</span>URL 转义</a>
+    <div class="foot">单文件 / 纯本地<br>无依赖 · 无上传</div>
+  </nav>
+
+  <main>
+    <h1>URL <span>转义</span></h1>
+    <div class="sub">选好模式，左贴右取 —— 顺带把查询参数拆成表</div>
+
+    <div class="bar">
+      <label>模式
+        <select id="mode">
+          <option value="component">encodeURIComponent（参数值）</option>
+          <option value="uri">encodeURI（整条 URL）</option>
+          <option value="decode">decodeURIComponent（解码）</option>
+          <option value="html">HTML 实体转义</option>
+        </select>
+      </label>
+      <label><input type="checkbox" id="plus" checked> 空格转 + / + 转空格</label>
+      <label><input type="checkbox" id="parsed" checked> 解析查询参数表</label>
+    </div>
+
+    <div class="wrap">
+      <section class="pane">
+        <header><span>输入</span><b id="state">等待输入</b></header>
+        <textarea id="input" spellcheck="false" placeholder="https://a.com/s?q=中文 关键词&t=1
+或者粘 %E4%B8%AD%E6%96%87"></textarea>
+      </section>
+      <section class="pane">
+        <header><span>输出</span><button class="ghost" id="copy" style="padding:3px 12px;font-size:11px">复制</button></header>
+        <pre class="out" id="output"><em>实时转换…</em></pre>
+      </section>
+    </div>
+
+    <section class="q" id="qbox" hidden>
+      <h3 id="qtitle">查询参数</h3>
+      <div id="qbody"></div>
+    </section>
+
+    <span class="status" id="status"></span>
+  </main>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const input = $('input'), output = $('output'), state = $('state'), status = $('status');
+
+const HTML = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
+const unHTML = { amp: '&', lt: '<', gt: '>', quot: '"', '#39': "'", apos: "'", nbsp: '\u00a0' };
+
+function convert() {
+  const raw = input.value;
+  const plus = $('plus').checked;
+  if (!raw) { state.textContent = '等待输入'; output.innerHTML = '<em>实时转换…</em>'; qbox.hidden = true; return; }
+  const mode = $('mode').value;
+  const src = mode === 'uri' ? raw : raw.trim();
+
+  let text;
+  try {
+    if (mode === 'component') {
+      text = encodeURIComponent(src);
+      if (plus) text = text.replace(/%20/g, '+');
+    } else if (mode === 'uri') {
+      text = encodeURI(src);
+      if (plus) text = text.replace(/%20/g, '+');
+    } else if (mode === 'decode') {
+      text = decodeURIComponent(plus ? src.replace(/\+/g, ' ') : src);
+    } else {
+      text = src.replace(/[&<>"']/g, c => HTML[c]);
+    }
+    status.className = 'status';
+  } catch (e) {
+    text = '';
+    status.className = 'status on err';
+    status.textContent = '解码失败：URI malformed（% 后面不是合法两位十六进制）';
+  }
+
+  output.textContent = text;
+  state.textContent = '✓ ' + text.length + ' 字符';
+
+  // 查询参数表：一直跟着「输入」走，而不是跟着输出（输出常常是转义后的形式）
+  const p = $('parsed').checked ? parseURL(raw) : null;
+  qbox.hidden = !p;
+  if (p) renderQuery(p);
+}
+
+/* 解析查询参数：优先整条 URL，否则把输入当成裸 query string */
+function parseURL(text) {
+  const s = text.trim();
+  if (!/[?&]/.test(s)) return null;          // 没有 query 就不显示表格
+  try {
+    const u = /^[a-z][a-z0-9+.-]*:\/\//i.test(s) || /^\/\//.test(s)
+      ? new URL(s)
+      : new URL(s, 'http://x/');
+    return { base: u.origin === 'http://x' ? '' : u.origin, path: u.pathname, params: [...u.searchParams] };
+  } catch { return null; }
+}
+function esc(s) { return String(s).replace(/[&<>"]/g, c => HTML[c]); }
+function renderQuery(p) {
+  $('qtitle').textContent = (p.base || p.path !== '/' ? (p.base + p.path) + ' · ' : '') + p.params.length + ' 个参数';
+  if (!p.params.length) { $('qbody').innerHTML = '<div class="empty">没有 query 参数</div>'; return; }
+  $('qbody').innerHTML = '<table><thead><tr><th>key</th><th>value</th></tr></thead><tbody>'
+    + p.params.map(([k, v]) => `<tr><td class="k">${esc(k)}</td><td class="v">${esc(v)}</td></tr>`).join('')
+    + '</tbody></table>';
+}
+
+input.addEventListener('input', convert);
+$('mode').addEventListener('change', convert);
+$('plus').addEventListener('change', convert);
+$('parsed').addEventListener('change', convert);
+
+$('copy').addEventListener('click', async () => {
+  const text = output.textContent;
+  if (!text || text.startsWith('实时转换')) return;
+  try { await navigator.clipboard.writeText(text); }
+  catch {
+    const r = document.createRange(); r.selectNodeContents(output);
+    const sel = getSelection(); sel.removeAllRanges(); sel.addRange(r);
+    document.execCommand('copy'); sel.removeAllRanges();
+  }
+  status.className = 'status on';
+  status.textContent = '已复制';
+});
+
+// 自检
+(function selfTest() {
+  const ok = (cond, msg, got) => console.assert(cond, msg, got);
+  const type = s => { input.value = s; convert(); return output.textContent; };
+
+  $('mode').value = 'component'; $('plus').checked = false;
+  ok(type('a b&c=d/中') === 'a%20b%26c%3Dd%2F%E4%B8%AD', 'component', output.textContent);
+  $('plus').checked = true;
+  ok(type('a b') === 'a+b', 'component+space', output.textContent);
+  ok(type('a+b') === 'a%2Bb', 'component+literal-plus', output.textContent);
+  input.value = 'a+b%20c'; $('mode').value = 'decode'; convert();
+  ok(output.textContent === 'a b c', 'decode', output.textContent);
+  $('mode').value = 'uri'; $('plus').checked = false;
+  ok(type('https://a.com/s?q=中文 词&t=1') === 'https://a.com/s?q=%E4%B8%AD%E6%96%87%20%E8%AF%8D&t=1', 'uri', output.textContent);
+  $('mode').value = 'html';
+  ok(type('<a href="x">&') === '&lt;a href=&quot;x&quot;&gt;&amp;', 'html', output.textContent);
+  $('mode').value = 'decode';
+  ok(type('%E4%B8%AD') === '中', 'decode-utf8', output.textContent);
+
+  // 参数表
+  $('mode').value = 'component'; $('plus').checked = true; $('parsed').checked = true;
+  input.value = 'https://a.com/s?q=%E4%B8%AD%E6%96%87&t=1&t=2'; convert();
+  const rows = [...document.querySelectorAll('#qbody tr')].map(tr => tr.textContent);
+  ok(!qbox.hidden && rows.join('|').includes('中文'), 'query table', rows.join('|'));
+  ok(document.querySelectorAll('#qbody tbody tr').length === 3, 'query rows', rows.length);
+
+  input.value = ''; $('parsed').checked = true; convert();
+})();
+</script>
+</body>
+</html>

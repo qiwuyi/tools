@@ -3,204 +3,42 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>SQL IN 转换器</title>
-<style>
-:root{
-  --bg:#0e1116; --panel:#141a22; --line:#232c38; --ink:#dde5ef; --dim:#6d7c8f;
-  --accent:#ff7a45; --accent2:#4dd4ac;
-}
-*{box-sizing:border-box}
-body{
-  margin:0; min-height:100vh; background:
-    radial-gradient(1100px 600px at 85% -10%, #1b2733 0%, transparent 60%),
-    radial-gradient(800px 500px at 0% 100%, #1a2028 0%, transparent 55%), var(--bg);
-  color:var(--ink);
-  font:14px/1.6 "Cascadia Code", ui-monospace, Consolas, monospace;
-  display:flex; flex-direction:column; align-items:center; padding:40px 20px 60px;
-}
-h1{
-  font-size:20px; letter-spacing:.18em; text-transform:uppercase; margin:0 0 4px;
-  font-weight:600;
-}
-h1 span{color:var(--accent)}
-.sub{color:var(--dim); font-size:12px; letter-spacing:.06em; margin-bottom:26px}
-.wrap{width:100%; max-width:1180px; display:grid; grid-template-columns:1fr 1fr; gap:16px}
-@media(max-width:860px){.wrap{grid-template-columns:1fr}}
-.pane{
-  background:var(--panel); border:1px solid var(--line); border-radius:10px;
-  display:flex; flex-direction:column; overflow:hidden;
-  box-shadow:0 18px 40px -28px #000;
-}
-.pane header{
-  padding:9px 12px; border-bottom:1px solid var(--line);
-  font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:var(--dim);
-  display:flex; justify-content:space-between; align-items:center; gap:10px;
-}
-.pane header b{color:var(--accent2); font-weight:500; letter-spacing:.06em}
-textarea{
-  flex:1; min-height:280px; resize:vertical; border:0; outline:0; padding:14px;
-  background:transparent; color:var(--ink); font:inherit; line-height:1.7;
-  tab-size:2;
-}
-textarea::placeholder{color:#3f4c5c}
-.out{white-space:pre-wrap; word-break:break-all; padding:14px; min-height:280px; overflow:auto}
-.out em{color:var(--dim); font-style:normal}
-.bar{
-  display:flex; flex-wrap:wrap; gap:10px 18px; align-items:center;
-  margin:18px 0 14px; padding:14px 16px; width:100%; max-width:1180px;
-  background:var(--panel); border:1px solid var(--line); border-radius:10px;
-}
-label{display:flex; align-items:center; gap:7px; color:var(--dim); font-size:12px; cursor:pointer; user-select:none}
-input[type=text],select{
-  background:#0b0f14; color:var(--ink); border:1px solid var(--line); border-radius:5px;
-  padding:5px 8px; font:inherit; font-size:12px; outline:0;
-}
-input[type=text]:focus,select:focus{border-color:var(--accent)}
-input[type=checkbox]{accent-color:var(--accent); width:15px; height:15px}
-button{
-  background:var(--accent); color:#12070a; border:0; border-radius:5px;
-  padding:7px 16px; font:inherit; font-weight:600; cursor:pointer;
-  transition:filter .15s, transform .1s;
-}
-button:hover{filter:brightness(1.12)}
-button:active{transform:translateY(1px)}
-button.ghost{background:transparent; color:var(--dim); border:1px solid var(--line)}
-button.ghost:hover{color:var(--ink); border-color:var(--accent)}
-.status{color:var(--accent2); font-size:12px; opacity:0; transition:opacity .25s}
-.status.on{opacity:1}
-</style>
+<title>工具箱 · Tools</title>
+<link rel="stylesheet" href="shell.css">
 </head>
 <body>
+<div class="app">
+  <nav class="side">
+    <div class="brand"><b>TOOLS</b> 工具箱</div>
+    <a href="index.html" class="on"><span class="tag">⌂</span>全部工具</a>
+    <a href="sql-in.html"><span class="tag">SQL</span>IN 转换器</a>
+    <a href="json.html"><span class="tag">{}</span>JSON 格式化</a>
+    <a href="url.html"><span class="tag">%</span>URL 转义</a>
+    <div class="foot">单文件 / 纯本地<br>无依赖 · 无上传</div>
+  </nav>
 
-<h1>SQL <span>IN</span> 转换器</h1>
-<div class="sub">粘贴 → 去换行去符号 → 加引号加逗号 → 复制进 IN ( ... )</div>
+  <main>
+    <h1>TOOLS <span>工具箱</span></h1>
+    <div class="sub">粘贴 → 转换 → 复制。所有计算都在浏览器本地完成</div>
 
-<div class="bar">
-  <label>引号
-    <select id="quote">
-      <option value="'">' 单引号</option>
-      <option value='"'>" 双引号</option>
-      <option value="">不加</option>
-    </select>
-  </label>
-  <label><input type="checkbox" id="trim" checked> 去首尾空白</label>
-  <label><input type="checkbox" id="dedup" checked> 去重</label>
-  <label><input type="checkbox" id="sort"> 排序</label>
-  <label>分隔
-    <select id="split">
-      <option value="any">任意空白 / 逗号 / 顿号 / 分号</option>
-      <option value="line">按行</option>
-      <option value="comma">按逗号</option>
-    </select>
-  </label>
-  <label>换行
-    <select id="wrap">
-      <option value="none">不换行</option>
-      <option value="10">每 10 个换行</option>
-      <option value="5">每 5 个换行</option>
-    </select>
-  </label>
-  <label><input type="checkbox" id="stmt" checked> 补 SELECT ... IN ( )</label>
-  <label><input type="checkbox" id="esc" checked> 转义内部引号</label>
+    <div class="grid">
+      <a class="card" href="sql-in.html">
+        <span class="k">SQL</span>
+        <span class="t">SQL IN 转换器</span>
+        <span class="d">一坨 ID → 去重排序 → 加引号逗号 → 直接粘进 IN ( ... )</span>
+      </a>
+      <a class="card" href="json.html">
+        <span class="k">JSON</span>
+        <span class="t">JSON 格式化</span>
+        <span class="d">美化 / 压缩 / 转义反转义 / 校验报错定位 / 转 YAML·Go·Java·Python 结构体</span>
+      </a>
+      <a class="card" href="url.html">
+        <span class="k">URL</span>
+        <span class="t">URL 转义</span>
+        <span class="d">encodeURIComponent / encodeURI / 解码 / 查询参数拆表 / HTML 实体</span>
+      </a>
+    </div>
+  </main>
 </div>
-
-<div class="wrap">
-  <section class="pane">
-    <header><span>输入</span><b id="count">0 项</b></header>
-    <textarea id="input" spellcheck="false" placeholder="一行一个，或者直接粘一大坨：
-1001
-1002
-'1003'
-「1004」, 1005;"></textarea>
-  </section>
-  <section class="pane">
-    <header><span>输出</span><button class="ghost" id="copy" style="padding:3px 12px;font-size:11px">复制</button></header>
-    <div class="out" id="output"><em>实时转换…</em></div>
-  </section>
-</div>
-
-<span class="status" id="status"></span>
-
-<script>
-const $ = id => document.getElementById(id);
-const input = $('input'), output = $('output'), count = $('count'), status = $('status');
-
-// 常见包裹符号，成对剥掉
-const WRAPS = /^[\s'"`‘’“”「」『』【】\[\]()<>]+|[\s'"`‘’“”「」『』【】\[\]()<>]+$/g;
-
-function convert() {
-  const raw = input.value;
-  const mode = $('split').value;
-  const q = $('quote').value;
-  const doTrim = $('trim').checked, doDedup = $('dedup').checked, doSort = $('sort').checked;
-  const wrapEvery = parseInt($('wrap').value, 10) || 0;
-  const doStmt = $('stmt').checked, doEsc = $('esc').checked;
-
-  let items;
-  if (mode === 'line')       items = raw.split(/\r?\n/);
-  else if (mode === 'comma') items = raw.split(/[,，、;；]+/);
-  else                       items = raw.split(/[\s,，、;；]+/);
-
-  items = items.map(s => doTrim ? s.trim() : s).filter(s => s.length);
-
-  // 剥掉用户从 Excel / 日志里带过来的包裹符号，避免变成 "''1001''"
-  items = items.map(s => s.replace(WRAPS, '')).filter(s => s.length);
-
-  if (doDedup) items = [...new Set(items)];
-  if (doSort)  items = items.sort((a, b) => a.localeCompare(b, 'zh-CN', { numeric: true }));
-
-  count.textContent = items.length + ' 项';
-  if (!items.length) { output.innerHTML = '<em>实时转换…</em>'; return; }
-
-  const cells = items.map(s => {
-    if (!q) return s;
-    const body = doEsc ? s.replaceAll(q, q + q) : s;
-    return q + body + q;
-  });
-
-  let text;
-  if (wrapEvery > 0) {
-    const lines = [];
-    for (let i = 0; i < cells.length; i += wrapEvery) lines.push(cells.slice(i, i + wrapEvery).join(', '));
-    text = lines.join(',\n');
-  } else {
-    text = cells.join(', ');
-  }
-
-  if (doStmt) text = 'SELECT * FROM 表名 WHERE 字段 IN (\n' + text + '\n);';
-  output.textContent = text;
-}
-
-input.addEventListener('input', convert);
-document.querySelectorAll('input,select').forEach(el => el.addEventListener('change', convert));
-
-$('copy').addEventListener('click', async () => {
-  const text = output.textContent;
-  if (!text || text.startsWith('实时转换')) return;
-  try { await navigator.clipboard.writeText(text); }
-  catch {
-    const r = document.createRange(); r.selectNodeContents(output);
-    const sel = getSelection(); sel.removeAllRanges(); sel.addRange(r);
-    document.execCommand('copy'); sel.removeAllRanges();
-  }
-  status.textContent = '已复制 ' + count.textContent;
-  status.classList.add('on');
-  clearTimeout(status._t);
-  status._t = setTimeout(() => status.classList.remove('on'), 1400);
-});
-
-// 自检：默认设置下的核心行为
-(function selfTest() {
-  const cases = [
-    ["1001\n1002\n'1003'\n「1004」, 1005;", "SELECT * FROM 表名 WHERE 字段 IN (\n'1001', '1002', '1003', '1004', '1005'\n);"],
-    ["a\n\na\n b ", "SELECT * FROM 表名 WHERE 字段 IN (\n'a', 'b'\n);"],
-  ];
-  input.value = cases[0][0]; convert();
-  console.assert(output.textContent === cases[0][1], 'case 1 失败:', output.textContent);
-  input.value = cases[1][0]; convert();
-  console.assert(output.textContent === cases[1][1], 'case 2 失败:', output.textContent);
-  input.value = ''; convert();
-})();
-</script>
 </body>
 </html>
