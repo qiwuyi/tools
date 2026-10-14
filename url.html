@@ -30,7 +30,7 @@
 
   <main>
     <h1>URL <span>转义</span></h1>
-    <div class="sub">选好模式，左贴右取 —— 顺带把查询参数拆成表</div>
+    <div class="sub">选好模式，左贴右取 —— 顺带拆查询参数（含 # 路由）与 &amp;amp; 反转义</div>
 
     <div class="bar">
       <label>模式
@@ -39,9 +39,11 @@
           <option value="uri">encodeURI（整条 URL）</option>
           <option value="decode">decodeURIComponent（解码）</option>
           <option value="html">HTML 实体转义</option>
+          <option value="htmlDecode">HTML 实体反转义（&amp;amp; → &amp;）</option>
         </select>
       </label>
       <label><input type="checkbox" id="plus" checked> 空格转 + / + 转空格</label>
+      <label><input type="checkbox" id="ent" checked> 顺带反转义 &amp;amp;</label>
       <label><input type="checkbox" id="parsed" checked> 解析查询参数表</label>
     </div>
 
@@ -72,13 +74,29 @@ const input = $('input'), output = $('output'), state = $('state'), status = $('
 
 const HTML = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
 const unHTML = { amp: '&', lt: '<', gt: '>', quot: '"', '#39': "'", apos: "'", nbsp: '\u00a0' };
+const ENT = /&(?:amp|lt|gt|quot|apos|nbsp|#39);/i;
+
+// HTML 实体反转义：命名实体 + &#39; + &#x27;
+function decodeEntities(s) {
+  return String(s).replace(/&(#x?[0-9a-f]+|[a-z]+);/gi, (m, body) => {
+    if (body[0] === '#') {
+      const hex = body[1] === 'x' || body[1] === 'X';   // body 形如 "#x42"，x 在第二位
+      const n = parseInt(body.slice(hex ? 2 : 1), hex ? 16 : 10);
+      return Number.isFinite(n) && n > 0 && n <= 0x10FFFF ? String.fromCodePoint(n) : m;
+    }
+    const k = body.toLowerCase();
+    return k in unHTML ? unHTML[k] : m;
+  });
+}
 
 function convert() {
   const raw = input.value;
   const plus = $('plus').checked;
   if (!raw) { state.textContent = '等待输入'; output.innerHTML = '<em>实时转换…</em>'; qbox.hidden = true; return; }
   const mode = $('mode').value;
-  const src = mode === 'uri' ? raw : raw.trim();
+  let src = mode === 'uri' ? raw : raw.trim();
+  // 从 HTML 页面/日志里复制来的 URL 常带 &amp;，先还原再按模式处理
+  if ($('ent').checked && mode !== 'html' && mode !== 'htmlDecode') src = decodeEntities(src);
 
   let text;
   try {
@@ -90,6 +108,8 @@ function convert() {
       if (plus) text = text.replace(/%20/g, '+');
     } else if (mode === 'decode') {
       text = decodeURIComponent(plus ? src.replace(/\+/g, ' ') : src);
+    } else if (mode === 'htmlDecode') {
+      text = decodeEntities(src);
     } else {
       text = src.replace(/[&<>"']/g, c => HTML[c]);
     }
@@ -109,21 +129,40 @@ function convert() {
   if (p) renderQuery(p);
 }
 
-/* 解析查询参数：优先整条 URL，否则把输入当成裸 query string */
+/* 解析查询参数：普通 query → hash 路由里的 query → 裸 query string
+   顺带处理粘贴时被转义的 &amp;（从 HTML 页面/日志里复制常带这个） */
 function parseURL(text) {
-  const s = text.trim();
-  if (!/[?&]/.test(s)) return null;          // 没有 query 就不显示表格
+  let s = text.trim();
+  const hadEnt = ENT.test(s);
+  if (hadEnt) s = decodeEntities(s);              // 不处理的话会拆出 "amp;orderId"
   try {
-    const u = /^[a-z][a-z0-9+.-]*:\/\//i.test(s) || /^\/\//.test(s)
-      ? new URL(s)
-      : new URL(s, 'http://x/');
-    return { base: u.origin === 'http://x' ? '' : u.origin, path: u.pathname, params: [...u.searchParams] };
+    const isAbs = /^[a-z][a-z0-9+.-]*:\/\//i.test(s) || /^\/\//.test(s);
+    let u = null, qs = '', where = 'query';
+    if (isAbs || /[/?#]/.test(s)) {
+      u = isAbs ? new URL(s) : new URL(s, 'http://x/');
+      qs = u.search.slice(1);
+      if (!qs) {                                   // SPA 把参数放在 # 后面：/v1/#/page?a=1&b=2
+        const hi = u.hash.indexOf('?');
+        if (hi >= 0) { qs = u.hash.slice(hi + 1); where = 'hash'; }
+      }
+    }
+    if (!qs && /=/.test(s)) { qs = s.replace(/^[?#]/, ''); where = 'raw'; }
+    const params = [...new URLSearchParams(qs)];
+    if (!params.length) return null;
+    return {
+      base: u && u.origin !== 'http://x' ? u.origin : '',
+      path: u ? u.pathname : '',
+      route: u && u.hash && where === 'hash' ? u.hash.slice(0, u.hash.indexOf('?')) : '',
+      params, where, hadEnt,
+    };
   } catch { return null; }
 }
 function esc(s) { return String(s).replace(/[&<>"]/g, c => HTML[c]); }
 function renderQuery(p) {
-  $('qtitle').textContent = (p.base || p.path !== '/' ? (p.base + p.path) + ' · ' : '') + p.params.length + ' 个参数';
-  if (!p.params.length) { $('qbody').innerHTML = '<div class="empty">没有 query 参数</div>'; return; }
+  const loc = (p.base || p.path !== '/' ? (p.base + p.path) : '') + (p.route || '');
+  const tags = p.where === 'hash' ? '（# 路由内）' : p.where === 'raw' ? '（裸 query）' : '';
+  $('qtitle').textContent = (loc ? loc + ' · ' : '') + p.params.length + ' 个参数' + tags;
+  if (p.hadEnt) $('qtitle').textContent += ' · 已反转义 &amp;';
   $('qbody').innerHTML = '<table><thead><tr><th>key</th><th>value</th></tr></thead><tbody>'
     + p.params.map(([k, v]) => `<tr><td class="k">${esc(k)}</td><td class="v">${esc(v)}</td></tr>`).join('')
     + '</tbody></table>';
@@ -132,6 +171,7 @@ function renderQuery(p) {
 input.addEventListener('input', convert);
 $('mode').addEventListener('change', convert);
 $('plus').addEventListener('change', convert);
+$('ent').addEventListener('change', convert);
 $('parsed').addEventListener('change', convert);
 
 $('copy').addEventListener('click', async () => {
@@ -173,7 +213,37 @@ $('copy').addEventListener('click', async () => {
   ok(!qbox.hidden && rows.join('|').includes('中文'), 'query table', rows.join('|'));
   ok(document.querySelectorAll('#qbody tbody tr').length === 3, 'query rows', rows.length);
 
-  input.value = ''; $('parsed').checked = true; convert();
+  // HTML 实体反转义
+  $('mode').value = 'htmlDecode';
+  ok(type('a&amp;b&lt;c&gt;&quot;d&#39;e&nbsp;f') === 'a&b<c>"d\'e\u00a0f', 'htmlDecode', JSON.stringify(output.textContent));
+  ok(type('&#65;&#x42;&#x4e2d;') === 'AB中', 'htmlDecode numeric', output.textContent);
+  ok(type('&unknown; &amp') === '&unknown; &amp', 'htmlDecode leaves bad entities', output.textContent);
+
+  // hash 路由里的 query + &amp;（用户实际那一条）
+  $('mode').value = 'component'; $('ent').checked = true; $('parsed').checked = true;
+  input.value = 'https://m.quanmaigo.com/v1/#/transferPage?appId=3&amp;orderId=20261014114050361598&amp;timestamp=1791949251&amp;brandId=1552&amp;sign=18ae59561f148996beb2ba192c24f6f2&amp;extra=qxfl';
+  convert();
+  const keys = [...document.querySelectorAll('#qbody td.k')].map(td => td.textContent);
+  const vals = [...document.querySelectorAll('#qbody td.v')].map(td => td.textContent);
+  ok(!qbox.hidden, 'hash route table shown', '');
+  ok(keys.join(',') === 'appId,orderId,timestamp,brandId,sign,extra', 'hash keys (no amp;)', keys.join(','));
+  ok(!keys.some(k => k.includes('amp;')), 'no amp; in keys', keys.join(','));
+  ok(vals[1] === '20261014114050361598' && vals[5] === 'qxfl', 'hash values', vals.join(','));
+  ok($('qtitle').textContent.includes('已反转义'), 'entity badge', $('qtitle').textContent);
+  // 编码结果里 &amp; 已还原成 &，被正确编码为 %26
+  ok(output.textContent.includes('%26orderId'), 'amp decoded before encode', output.textContent);
+
+  // 关掉实体反转义时保持原样（用户想看到原始内容）；& 被编码成 %26，"amp;" 原样保留
+  $('ent').checked = false; convert();
+  ok(output.textContent.includes('%26amp%3BorderId'), 'entity toggle off', output.textContent.slice(0, 120));
+  $('ent').checked = true;
+
+  // 普通 query 与 SPA hash 互不干扰
+  input.value = 'https://a.com/p?x=1#/route?y=2'; convert();
+  const k2 = [...document.querySelectorAll('#qbody td.k')].map(td => td.textContent);
+  ok(k2.join(',') === 'x', 'search wins over hash', k2.join(','));
+
+  input.value = ''; $('parsed').checked = true; $('ent').checked = true; convert();
 })();
 </script>
 </body>
