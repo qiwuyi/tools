@@ -36,7 +36,7 @@
       <label>模式
         <select id="mode">
           <option value="component">encodeURIComponent（参数值）</option>
-          <option value="uri">encodeURI（整条 URL）</option>
+          <option value="uri" selected>encodeURI（整条 URL）</option>
           <option value="decode">decodeURIComponent（解码）</option>
           <option value="html">HTML 实体转义</option>
           <option value="htmlDecode">HTML 实体反转义（&amp;amp; → &amp;）</option>
@@ -192,6 +192,13 @@ $('copy').addEventListener('click', async () => {
   const ok = (cond, msg, got) => console.assert(cond, msg, got);
   const type = s => { input.value = s; convert(); return output.textContent; };
 
+  // 页面初始默认值（必须在改动任何控件之前断言）
+  ok($('mode').value === 'uri', 'default mode is encodeURI', $('mode').value);
+  ok($('plus').checked && $('ent').checked && $('parsed').checked, 'default checkboxes on', '');
+
+  // 自检会来回改控件，先把初始状态存下来，跑完原样还原，免得用户首屏看到被改过的默认值
+  const initial = { mode: $('mode').value, plus: $('plus').checked, ent: $('ent').checked, parsed: $('parsed').checked, input: input.value };
+
   $('mode').value = 'component'; $('plus').checked = false;
   ok(type('a b&c=d/中') === 'a%20b%26c%3Dd%2F%E4%B8%AD', 'component', output.textContent);
   $('plus').checked = true;
@@ -243,7 +250,11 @@ $('copy').addEventListener('click', async () => {
   const k2 = [...document.querySelectorAll('#qbody td.k')].map(td => td.textContent);
   ok(k2.join(',') === 'x', 'search wins over hash', k2.join(','));
 
-  input.value = ''; $('parsed').checked = true; $('ent').checked = true; convert();
+  // 还原首屏状态
+  $('mode').value = initial.mode; $('plus').checked = initial.plus;
+  $('ent').checked = initial.ent; $('parsed').checked = initial.parsed;
+  input.value = initial.input; convert();
+  ok($('mode').value === 'uri', 'default restored after self-test', $('mode').value);
 })();
 </script>
 </body>

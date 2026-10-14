@@ -392,6 +392,11 @@ $('copy').addEventListener('click', async () => {
   ok(state.textContent === '✓ 合法 JSON' && output.textContent.includes('## response') && output.textContent.includes('"a": 1'), 'rpc mode on plain json', output.textContent.slice(0, 120));
 
   input.value = ''; $('sortkey').checked = true; render();
+
+  // 还原首屏状态：自检来回改了控件，不还原的话用户打开页面看到的是被改过的默认值
+  $('mode').value = 'pretty'; $('indent').value = '2'; $('sortkey').checked = false;
+  $('root').value = 'Root'; input.value = ''; render();
+  ok($('mode').value === 'pretty' && !$('sortkey').checked, 'defaults restored after self-test', $('mode').value);
 })();
 </script>
 </body>
