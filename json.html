@@ -19,7 +19,7 @@
 
   <main>
     <h1>JSON <span>格式化</span></h1>
-    <div class="sub">美化 / 压缩 / 转义反转义 / 校验定位 / 生成 YAML·Go·Java·Python·TS</div>
+    <div class="sub">美化 / 压缩 / 转义反转义 / 校验定位 / RPC 日志拆解 / 生成 YAML·Go·Java·Python·TS</div>
 
     <div class="bar">
       <label>输出格式
@@ -28,6 +28,7 @@
           <option value="min">JSON 压缩</option>
           <option value="escape">转义为字符串</option>
           <option value="unescape">反转义字符串</option>
+          <option value="rpc">RPC 日志拆解</option>
           <option value="yaml">YAML</option>
           <option value="go">Go struct</option>
           <option value="java">Java 类</option>
@@ -93,6 +94,73 @@ function locate(text, err) {
     return `第 ${before.split('\n').length} 行 第 ${pos[1] - before.lastIndexOf('\n')} 列`;
   }
   return '';
+}
+
+/* ---------- RPC 日志（Tmall / neuron 网关风格） ----------
+   请求Tmall.method(X).request({...}).response({...}).error(<nil>).latency(276ms)
+   整行不是 JSON，拆出 request / response 两段再各自 parse。 */
+const RPC_HEAD = /^\s*请求?\s*([A-Za-z_][\w.]*)\(([^()]*)\)/;
+
+// 从 start 处的 { 或 [ 起，按配平取出一整段 JSON 文本（字符串里的括号不算）
+function balanced(text, start) {
+  const open = text[start], close = open === '{' ? '}' : ']';
+  let depth = 0, inStr = false, q = '', esc = false;
+  for (let i = start; i < text.length; i++) {
+    const c = text[i];
+    if (inStr) {
+      if (esc) esc = false;
+      else if (c === '\\') esc = true;
+      else if (c === q) inStr = false;
+      continue;
+    }
+    if (c === '"') { inStr = true; q = c; continue; }
+    if (c === open) depth++;
+    else if (c === close && !--depth) return text.slice(start, i + 1);
+  }
+  return null;
+}
+
+function rpcParts(text) {
+  if (!/\.request\s*\(/.test(text) || !/\.response\s*\(/.test(text)) return null;
+  const head = RPC_HEAD.exec(text);
+  if (!head) return null;
+
+  const argAt = marker => {                       // 取 marker 后紧跟的那段 JSON 参数
+    const i = text.indexOf(marker);
+    if (i < 0) return null;
+    let j = i + marker.length;
+    while (j < text.length && /\s/.test(text[j])) j++;
+    if (text[j] !== '{' && text[j] !== '[') return null;   // 参数不是 JSON
+    return balanced(text, j);
+  };
+
+  const resRaw = argAt('.response(');
+  if (!resRaw) return null;
+  const reqRaw = argAt('.request(');
+  const response = JSON.parse(resRaw);
+  const request = reqRaw ? JSON.parse(reqRaw) : null;
+  const pick = re => (re.exec(text) || [])[1];
+
+  return {
+    service: head[1], arg: head[2], request, response,
+    error: pick(/\.error\(([^)]*)\)/),
+    latency: pick(/\.latency\(([^)]*)\)/),
+    // 生成器/YAML 等模式默认针对 response.body（业务数据），没有就退到 response
+    root: (response && response.body && typeof response.body === 'object') ? response.body : response,
+  };
+}
+
+function rpcReport(p, I) {
+  const meta = [];
+  if (p.response.statusCode != null) meta.push('statusCode ' + p.response.statusCode);
+  if (p.response.body && p.response.body.requestId) meta.push('requestId ' + p.response.body.requestId);
+  if (p.latency) meta.push('latency ' + p.latency);
+  if (p.error != null) meta.push('error ' + p.error);
+  const L = ['# ' + p.service + '(' + p.arg + ')'];
+  if (meta.length) L.push(meta.join('  ·  '));
+  if (p.request) L.push('', '## request', JSON.stringify(p.request, null, I));
+  L.push('', '## response', JSON.stringify(p.response, null, I));
+  return L.join('\n');
 }
 
 /* ---------- YAML ---------- */
@@ -213,15 +281,22 @@ function render() {
     return;
   }
 
-  let obj;
+  // RPC 日志（请求Tmall.x().request(..).response(..)）：拆包后喂给下面所有模式
+  // 生成器 / YAML 默认针对 response.body，是最常用的业务数据
+  let obj, rpcInfo = null;
   try { obj = parse(raw); }
   catch (e) {
-    const at = locate(raw, e);
-    state.textContent = '✗ 非法 JSON';
-    output.innerHTML = '<em>解析失败，先修输入</em>';
-    status.textContent = (at ? at + ' · ' : '') + e.message.replace(/^JSON\.parse: /, '');
-    status.classList.add('on', 'err');
-    return;
+    rpcInfo = rpcParts(raw);                    // 不是 JSON 就试试 RPC 日志
+    if (!rpcInfo) {
+      state.textContent = '✗ 无法解析';
+      output.innerHTML = '<em>既不是 JSON，也不是 RPC 日志</em>';
+      status.textContent = (locate(raw, e) || '') + (locate(raw, e) ? ' · ' : '')
+        + e.message.replace(/^JSON\.parse: /, '');
+      status.classList.add('on', 'err');
+      return;
+    }
+    obj = rpcInfo.root;
+    if ($('sortkey').checked) obj = sortDeep(obj);
   }
 
   const name = cap($('root').value.trim() || 'Root');
@@ -236,9 +311,9 @@ function render() {
     python: () => 'from dataclasses import dataclass\nfrom typing import Any, List\n\n' + typed(pyClass, obj, name),
     ts: () => typed(tsInterface, obj, name),
   };
-  const text = map[mode]();
+  const text = mode === 'rpc' ? rpcReport(rpcInfo || { service: '(普通 JSON)', arg: '', request: null, response: obj, error: null, latency: null }, I) : map[mode]();
   output.textContent = text;
-  state.textContent = '✓ 合法 JSON';
+  state.textContent = rpcInfo ? '✓ RPC 日志' : '✓ 合法 JSON';
   status.textContent = '已生成 · ' + text.length + ' 字符';
   status.classList.add('on');
 }
@@ -285,7 +360,36 @@ $('copy').addEventListener('click', async () => {
 
   input.value = '{"a":1,}';
   $('mode').value = 'pretty'; render();
-  ok(state.textContent === '✗ 非法 JSON' && status.classList.contains('err') && /^第 \d+ 行 第 \d+ 列/.test(status.textContent), 'error locate', status.textContent);
+  ok(state.textContent === '✗ 无法解析' && status.classList.contains('err') && /^第 \d+ 行 第 \d+ 列/.test(status.textContent), 'error locate', status.textContent);
+
+  // RPC 日志：真实 Tmall 网关格式（含嵌套括号、转义引号、<nil>）
+  const RPC = '请求Tmall.method(ListSelectionProductSaleInfos).request({"body":{"divisionCode":"441901","productIds":["763604494735802368","891197557832925184"],"purchaserId":"PID2200006282"}}).response({"headers":{"server":"istio-envoy"},"statusCode":200,"body":{"productSaleInfos":[{"canSell":false,"fuzzyQuantity":"无货","productId":"891197557832925184","skus":[{"price":2499,"title":"东方树叶(茉莉) \\"mini\\""}],"quantity":-1}],"requestId":"01A12A7D"}}).error(<nil>).latency(276ms)';
+
+  input.value = RPC; $('mode').value = 'rpc'; $('sortkey').checked = false; render();
+  ok(state.textContent === '✓ RPC 日志', 'rpc detected', state.textContent);
+  ok(output.textContent.includes('# Tmall.method(ListSelectionProductSaleInfos)'), 'rpc head', output.textContent.slice(0, 120));
+  ok(output.textContent.includes('statusCode 200') && output.textContent.includes('requestId 01A12A7D')
+    && output.textContent.includes('latency 276ms') && output.textContent.includes('error <nil>'), 'rpc meta', output.textContent.slice(0, 200));
+  ok(output.textContent.includes('## request') && output.textContent.includes('## response'), 'rpc sections', '');
+  ok(output.textContent.includes('PID2200006282') && output.textContent.includes('东方树叶(茉莉) \\"mini\\"'), 'rpc body intact', '');
+
+  // 同一个日志：生成器模式自动作用在 response.body 上
+  input.value = RPC;
+  $('mode').value = 'pretty'; render();
+  ok(!output.textContent.includes('"headers"') && output.textContent.includes('productSaleInfos'), 'rpc->pretty uses body', output.textContent.slice(0, 80));
+  $('mode').value = 'go'; render();
+  ok(output.textContent.includes('type Root struct') && output.textContent.includes('ProductSaleInfos []'), 'rpc->go', output.textContent.slice(0, 200));
+  $('mode').value = 'yaml'; render();
+  ok(output.textContent.startsWith('productSaleInfos:'), 'rpc->yaml', output.textContent.slice(0, 60));
+
+  // 括号配平不受字符串里的括号干扰
+  input.value = '请求Tmall.m(X).request({"a":"}{)("}).response({"b":1}).error(<nil>).latency(9ms)';
+  $('mode').value = 'rpc'; render();
+  ok(state.textContent === '✓ RPC 日志' && output.textContent.includes('"a": "}{)("'), 'brace-in-string', output.textContent.slice(0, 200));
+
+  // RPC 模式下粘普通 JSON：不报错，输出单段 response
+  input.value = '{"a":1}'; $('mode').value = 'rpc'; render();
+  ok(state.textContent === '✓ 合法 JSON' && output.textContent.includes('## response') && output.textContent.includes('"a": 1'), 'rpc mode on plain json', output.textContent.slice(0, 120));
 
   input.value = ''; $('sortkey').checked = true; render();
 })();
