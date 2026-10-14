@@ -101,7 +101,7 @@ function convert() {
   }
 
   output.textContent = text;
-  state.textContent = '✓ ' + text.length + ' 字符';
+  state.textContent = '输出 ' + text.length + ' 字符';
 
   // 查询参数表：一直跟着「输入」走，而不是跟着输出（输出常常是转义后的形式）
   const p = $('parsed').checked ? parseURL(raw) : null;
