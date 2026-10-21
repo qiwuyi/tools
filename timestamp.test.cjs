@@ -1,0 +1,25 @@
+// Run: node timestamp.test.cjs. No page-load self-tests or control mutation.
+const fs = require('node:fs');
+const vm = require('node:vm');
+const assert = require('node:assert/strict');
+const html = fs.readFileSync(__dirname + '/timestamp.html', 'utf8');
+const elements = Object.fromEntries(['mode','unit','zone','input','output','state','status','copy','now'].map(id => [id, {value:'',checked:false,className:'',textContent:'',addEventListener(){}}]));
+elements.mode.value = 'stamp'; elements.unit.value = 'auto'; elements.zone.value = '8';
+const context = vm.createContext({document:{getElementById:id=>elements[id]}, navigator:{}});
+vm.runInContext(html.match(/<script>([\s\S]*?)<\/script>/)[1], context);
+const run = code => vm.runInContext(code, context);
+assert.equal(run("formatDate(fromStamp('1792487856','auto').ms,8)"), '2026-10-20 17:17:36.000');
+assert.equal(run("formatDate(fromStamp('1792487856000','auto').ms,0)"), '2026-10-20 09:17:36.000');
+assert.equal(run("fromDate('2026-10-20 17:17:36',8)"),1792487856000);
+assert.equal(run("fromDate('2026-10-20T17:17:36.123',8)"),1792487856123);
+assert.equal(run("formatDate(fromStamp('0','s').ms,0)"),'1970-01-01 00:00:00.000');
+assert.equal(run("formatDate(fromStamp('-1','s').ms,0)"),'1969-12-31 23:59:59.000');
+assert.equal(run("fromDate('2024-02-29 00:00:00',0)"),1709164800000);
+for (const code of ["fromStamp('abc','auto')","fromStamp('17924878560','auto')","fromStamp('9007199254740992','ms')","formatDate(999999999999999,8)","fromDate('2026-02-29 00:00:00',8)","fromDate('2026-04-31 00:00:00',8)","fromDate('2026-10-20 24:00:00',8)","fromDate('2026-10-20 17:17:60',8)"]) assert.throws(()=>run(code),code);
+elements.input.value='1792487856'; run('render()');
+assert.match(elements.output.textContent,/2026-10-20 17:17:36.000/); assert.equal(elements.copy.disabled,false);
+elements.input.value='bad'; run('render()'); assert.equal(elements.copy.disabled,true);
+elements.input.value=''; run('render()'); assert.equal(elements.state.textContent,'等待输入');
+assert.equal(elements.mode.value,'stamp'); assert.equal(elements.zone.value,'8');
+for (const file of ['index.html','sql-in.html','json.html','url.html','timestamp.html']) assert.match(fs.readFileSync(__dirname+'/'+file,'utf8'),/href="timestamp.html"/);
+console.log('PASS: timestamp conversions, invalid inputs, render states and all navigation links');
