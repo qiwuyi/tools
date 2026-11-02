@@ -5,36 +5,38 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>JSON 格式化 · Tools</title>
 <link rel="stylesheet" href="shell.css">
+<link rel="stylesheet" href="apple.css">
 </head>
-<body>
+<body class="json-page">
 <div class="app">
-  <nav class="side">
-    <div class="brand"><b>TOOLS</b> 工具箱</div>
-    <a href="index.html"><span class="tag">⌂</span>全部工具</a>
-    <a href="sql-in.html"><span class="tag">SQL</span>IN 转换器</a>
-    <a href="json.html" class="on"><span class="tag">{}</span>JSON 格式化</a>
-    <a href="url.html"><span class="tag">%</span>URL 转义</a>
-    <a href="timestamp.html"><span class="tag">T</span>时间戳转换</a>
-    <div class="foot">单文件 / 纯本地<br>无依赖 · 无上传</div>
+  <nav class="side" aria-label="工具导航">
+    <div class="brand"><span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="6" height="6" rx="1.5"/><rect x="15" y="3" width="6" height="6" rx="1.5"/><rect x="3" y="15" width="6" height="6" rx="1.5"/><rect x="15" y="15" width="6" height="6" rx="1.5"/></svg></span>工具箱</div>
+    <div class="nav-links">
+    <a href="index.html"><span class="tag" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="6" height="6" rx="1.5"/><rect x="15" y="3" width="6" height="6" rx="1.5"/><rect x="3" y="15" width="6" height="6" rx="1.5"/><rect x="15" y="15" width="6" height="6" rx="1.5"/></svg></span>全部工具</a>
+    <a href="sql-in.html"><span class="tag" aria-hidden="true"><svg viewBox="0 0 24 24"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v14c0 4 16 4 16 0V5M4 12c0 4 16 4 16 0"/></svg></span>SQL IN 转换</a>
+    <a href="json.html" class="on" aria-current="page"><span class="tag" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M8 3H6v7l-3 2 3 2v7h2M16 3h2v7l3 2-3 2v7h-2"/></svg></span>JSON 格式化</a>
+    <a href="url.html"><span class="tag" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="m10 14 4-4M8 16l-1 1a4 4 0 0 1-6-6l4-4a4 4 0 0 1 6 0M16 8l1-1a4 4 0 0 1 6 6l-4 4a4 4 0 0 1-6 0" transform="translate(1 0) scale(.92)"/></svg></span>URL 转换</a>
+    <a href="timestamp.html"><span class="tag" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></span>时间戳转换</a>
+    </div>
+    <div class="foot">本地处理 · 无需上传</div>
   </nav>
 
   <main>
-    <h1>JSON <span>格式化</span></h1>
-    <div class="sub">美化 / 压缩 / 转义反转义 / 校验定位 / RPC 日志拆解 / 生成 YAML·Go·Java·Python·TS</div>
+    <div class="page-heading"><div><h1>JSON 格式化</h1><p class="sub">整理数据、检查格式，或生成你需要的类型。</p></div><span class="local-badge"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="10" width="14" height="11" rx="3"/><path d="M8 10V7a4 4 0 0 1 8 0v3M12 14v3"/></svg>仅在本地处理</span></div>
 
     <div class="bar">
       <label>输出格式
         <select id="mode">
-          <option value="pretty">JSON 美化</option>
+          <optgroup label="JSON 与日志"><option value="pretty">JSON 美化</option>
           <option value="min">JSON 压缩</option>
           <option value="escape">转义为字符串</option>
           <option value="unescape">反转义字符串</option>
           <option value="rpc">RPC 日志拆解</option>
-          <option value="yaml">YAML</option>
+          </optgroup><optgroup label="生成格式与类型"><option value="yaml">YAML</option>
           <option value="go">Go struct</option>
           <option value="java">Java 类</option>
           <option value="python">Python dataclass</option>
-          <option value="ts">TypeScript interface</option>
+          <option value="ts">TypeScript interface</option></optgroup>
         </select>
       </label>
       <label>缩进
@@ -51,15 +53,15 @@
     <div class="wrap">
       <section class="pane">
         <header><span>输入</span><b id="state">等待输入</b></header>
-        <textarea id="input" spellcheck="false" placeholder='{"id":1001,"tags":["a","b"],"ok":true}'></textarea>
+        <textarea aria-label="输入 JSON 或 RPC 日志" id="input" spellcheck="false" placeholder='{"id":1001,"tags":["a","b"],"ok":true}'></textarea>
       </section>
       <section class="pane">
-        <header><span>输出</span><button class="ghost" id="copy" style="padding:3px 12px;font-size:11px">复制</button></header>
-        <pre class="out" id="output"><em>实时转换…</em></pre>
+        <header><span>输出</span><button class="primary-copy" id="copy" disabled title="输入有效内容后可复制">复制结果</button></header>
+        <pre class="out" id="output" tabindex="0" aria-label="JSON 转换结果"><em>实时转换…</em></pre>
       </section>
     </div>
 
-    <span class="status" id="status"></span>
+    <span class="status" id="status" role="status" aria-live="polite"></span>
   </main>
 </div>
 
@@ -270,7 +272,10 @@ function typed(make, obj, name) {
 function render() {
   const raw = input.value;
   status.className = 'status';
-  if (!raw.trim()) { state.textContent = '等待输入'; output.innerHTML = '<em>实时转换…</em>'; return; }
+  $('copy').disabled = true;
+  $('copy').textContent = '复制结果';
+  $('copy').title = '输入有效内容后可复制';
+  if (!raw.trim()) { state.textContent = '等待输入'; output.innerHTML = '<em>在左侧粘贴 JSON 或日志，结果会显示在这里。</em>'; return; }
   const mode = $('mode').value;
 
   if (mode === 'unescape') {
@@ -278,6 +283,8 @@ function render() {
     try { s = JSON.parse(s); }            // "{\"a\":1}" → {"a":1}
     catch { s = s.replace(/\\(["'\\/bfnrtu])/g, (_, c) => ({ n: '\n', t: '\t', r: '\r', b: '\b', f: '\f' }[c] ?? c)); }
     output.textContent = s;
+    $('copy').disabled = false;
+    $('copy').title = '复制完整结果';
     state.textContent = s.length + ' 字符';
     return;
   }
@@ -314,6 +321,8 @@ function render() {
   };
   const text = mode === 'rpc' ? rpcReport(rpcInfo || { service: '(普通 JSON)', arg: '', request: null, response: obj, error: null, latency: null }, I) : map[mode]();
   output.textContent = text;
+  $('copy').disabled = false;
+  $('copy').title = '复制完整结果';
   state.textContent = rpcInfo ? '✓ RPC 日志' : '✓ 合法 JSON';
   status.textContent = '已生成 · ' + text.length + ' 字符';
   status.classList.add('on');
@@ -324,7 +333,7 @@ document.querySelectorAll('input,select').forEach(el => el.addEventListener('cha
 
 $('copy').addEventListener('click', async () => {
   const text = output.textContent;
-  if (!text || text.startsWith('实时转换')) return;
+  if ($('copy').disabled) return;
   try { await navigator.clipboard.writeText(text); }
   catch {
     const r = document.createRange(); r.selectNodeContents(output);
