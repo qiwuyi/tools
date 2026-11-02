@@ -7,17 +7,18 @@
 <link rel="stylesheet" href="shell.css">
 <style>
 :root{--dim:#a0adbd;--accent2:var(--accent)}
-main{gap:16px}h1,.sub{margin:0}
+main{gap:8px;padding:16px 24px}h1,.sub{margin:0}
 .source,.results,.q,.options,.notice{width:100%;max-width:1180px}
-.source textarea{min-height:144px;padding:16px}
-.results{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
-.result:first-child{grid-column:1/-1;border-color:var(--accent)}
-.pane header{padding:8px 16px;gap:8px;font-size:14px;letter-spacing:0;text-transform:none;min-height:48px}
+.source textarea{min-height:64px;height:80px;flex:none;padding:8px 16px}
+.results{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.result:first-child{border-color:var(--accent)}
+.pane header{padding:4px 16px;gap:8px;font-size:14px;letter-spacing:0;text-transform:none;min-height:40px}
 .pane header h2{font-size:14px;font-weight:600;margin:0;color:var(--ink)}
-.hint{margin:0;padding:8px 16px;color:var(--dim);font-size:14px}
-.out{min-height:96px;max-height:240px;padding:16px;font-size:14px;overflow-wrap:anywhere}
+.help{margin:0;display:grid;grid-template-columns:max-content 1fr;gap:8px 16px;padding:8px 0;font-size:14px}
+.help dt{font-weight:600}.help dd{margin:0;color:var(--dim)}
+.out{min-height:0;height:104px;flex:none;padding:8px 16px;font-size:14px;overflow-wrap:anywhere;line-height:1.6}
 .out.error{color:var(--err)}
-.options{border:1px solid var(--line);border-radius:8px;padding:8px 16px}
+.options{border:1px solid var(--line);border-radius:8px;padding:0 16px}
 summary{cursor:pointer;min-height:32px;line-height:32px;color:var(--dim)}
 summary:hover{color:var(--ink)}summary:active{opacity:.8}
 .settings{display:flex;flex-wrap:wrap;gap:8px 24px;padding:8px 0}
@@ -29,15 +30,19 @@ button.ghost:hover:not(:disabled){border-color:var(--accent)}
 textarea:focus-visible{outline-offset:-4px}
 textarea::placeholder{color:var(--dim)}
 .notice{font-size:14px;color:var(--dim);margin:0}
-.status{margin:0;min-height:24px;font-size:14px;transition:opacity .15s ease-out}
-.q{overflow:auto}.q h2{font-size:14px;font-weight:600;margin:0 0 8px;overflow-wrap:anywhere}
+.status{position:fixed;bottom:16px;left:50%;transform:translateX(-50%);z-index:2;max-width:calc(100vw - 32px);padding:8px 16px;background:var(--panel);border:1px solid var(--line);border-radius:8px;pointer-events:none;margin:0;font-size:14px;transition:opacity .15s ease-out}
+.q{border:1px solid var(--line);border-radius:8px;padding:0 16px}
+.q summary{font-size:14px;overflow-wrap:anywhere}
+#qbody{max-height:240px;overflow:auto;margin-bottom:8px}
 .q table{width:100%;border-collapse:collapse;background:var(--panel)}
 .q th,.q td{padding:8px 16px;border:1px solid var(--line);text-align:left;overflow-wrap:anywhere;font-size:14px}
 .q td:first-child{width:20%}.side .foot{color:var(--dim)}
+@media(max-width:1199px){.results{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:760px){
   .results{grid-template-columns:1fr}.source textarea,.out{font-size:15px}
   button,summary,label,.side a{min-height:44px}summary{line-height:44px}
-  .pane header{flex-wrap:wrap}.hint{font-size:15px}
+  main{padding:16px}.pane header{flex-wrap:wrap}.help{grid-template-columns:1fr;font-size:15px}
+  .source textarea{height:120px}.out{height:112px}
 }
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{transition:none!important}}
 </style>
@@ -61,20 +66,21 @@ textarea::placeholder{color:var(--dim)}
       <textarea id="input" spellcheck="false" placeholder="粘贴 URL、带 \u0026 / &amp;amp; 的链接，或 % 编码文本…"></textarea>
     </section>
     <details class="options">
-      <summary>转换选项</summary>
+      <summary>转换选项与说明</summary>
       <div class="settings">
         <label><input type="checkbox" id="ent" checked>还原 JSON / Unicode 和 HTML 转义</label>
         <label><input type="checkbox" id="plus">表单格式：空格 ↔ +（编码 / 解码结果）</label>
         <label><input type="checkbox" id="parsed" checked>显示查询参数表</label>
       </div>
+      <dl class="help" id="help"></dl>
     </details>
     <p class="notice" id="notice">粘贴后生成全部结果；每项都可以直接复制。</p>
     <div class="results" id="results"></div>
     <span class="status" id="status" role="status" aria-live="polite"></span>
-    <section class="q" id="qbox" hidden>
-      <h2 id="qtitle">查询参数</h2>
+    <details class="q" id="qbox" hidden>
+      <summary id="qtitle">查询参数</summary>
       <div id="qbody"></div>
-    </section>
+    </details>
   </main>
 </div>
 <script>
@@ -145,8 +151,9 @@ const formats = [
   ['htmlDecode', '仅 HTML 实体还原', '只处理原始输入中的 &amp; / &#38; 等实体。'],
 ];
 $('results').innerHTML = formats.map(([id, title, hint]) => '<section class="pane result">'
-  + '<header><h2>' + esc(title) + '</h2><button class="ghost" id="copy-' + id + '" aria-label="复制' + esc(title) + '" disabled>复制</button></header>'
-  + '<p class="hint">' + esc(hint) + '</p><pre class="out" id="out-' + id + '">等待粘贴输入…</pre></section>').join('');
+  + '<header><h2 title="' + esc(hint) + '">' + esc(title) + '</h2><button class="ghost" id="copy-' + id + '" aria-label="复制' + esc(title) + '" disabled>复制</button></header>'
+  + '<pre class="out" id="out-' + id + '" tabindex="0" aria-label="' + esc(title) + '结果" aria-describedby="help-' + id + '">等待粘贴输入…</pre></section>').join('');
+$('help').innerHTML = formats.map(([id, title, hint]) => '<dt>' + esc(title) + '</dt><dd id="help-' + id + '">' + esc(hint) + '</dd>').join('');
 
 function convert() {
   const raw = input.value;

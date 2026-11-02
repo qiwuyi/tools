@@ -6,13 +6,25 @@
 <title>SQL IN 转换器 · Tools</title>
 <link rel="stylesheet" href="shell.css">
 <style>
+:root{--dim:#a0adbd;--accent2:var(--accent)}
+main{padding:16px 24px}
+.sub{margin-bottom:8px}
+.bar{margin:8px 0;padding:8px 16px;gap:8px 16px}
+.wrap textarea,.wrap .out{min-height:200px;height:clamp(200px,calc(100dvh - 296px),520px);flex:none;overflow:auto}
+.pane header{min-height:40px}
+#copy{min-height:32px;min-width:64px}
+:focus-visible{outline:2px solid var(--accent);outline-offset:4px}
+textarea:focus-visible{outline-offset:-4px}
 .quote-options{display:flex;flex-wrap:wrap;align-items:center;gap:8px;color:var(--dim);font-size:12px}
 .quote-options label{min-height:32px;padding:4px 8px;border:1px solid var(--line);border-radius:8px;color:var(--ink)}
 .quote-options label:has(:checked){border-color:var(--accent);background:#1c2530}
 .quote-options label:hover{border-color:var(--accent)}
 .quote-options input{accent-color:var(--accent);margin:0}
 .quote-options input:focus-visible{outline:2px solid var(--accent);outline-offset:4px}
-@media(max-width:760px){.quote-options label{min-height:44px}}
+@media(max-width:760px){
+  main{padding:16px}.quote-options label,#copy{min-height:44px}
+  .wrap textarea,.wrap .out{height:200px;font-size:15px}
+}
 </style>
 </head>
 <body>
@@ -62,7 +74,7 @@
     <div class="wrap">
       <section class="pane">
         <header><span>输入</span><b id="count">0 项</b></header>
-        <textarea id="input" spellcheck="false" placeholder="一行一个，或者直接粘一大坨：
+        <textarea id="input" aria-label="输入待转换的值" spellcheck="false" placeholder="一行一个，或者直接粘一大坨：
 1001
 1002
 '1003'
@@ -70,7 +82,7 @@
       </section>
       <section class="pane">
         <header><span>输出</span><button class="ghost" id="copy" style="padding:3px 12px;font-size:11px">复制</button></header>
-        <div class="out" id="output"><em>实时转换…</em></div>
+        <div class="out" id="output" tabindex="0" aria-label="SQL 转换结果"><em>实时转换…</em></div>
       </section>
     </div>
 
