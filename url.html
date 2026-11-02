@@ -3,260 +3,234 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>URL 转义 · Tools</title>
+<title>URL 转换 · Tools</title>
 <link rel="stylesheet" href="shell.css">
 <style>
-.q{width:100%; max-width:1180px; margin-top:16px}
-.q table{width:100%; border-collapse:collapse; background:var(--panel); border:1px solid var(--line); border-radius:10px; overflow:hidden}
-.q th,.q td{padding:8px 12px; border-bottom:1px solid var(--line); font-size:12px; text-align:left; word-break:break-all; vertical-align:top}
-.q th{color:var(--dim); font-weight:500; letter-spacing:.1em; font-size:11px; text-transform:uppercase; background:#121821}
-.q tr:last-child td{border-bottom:0}
-.q td.k{color:var(--accent2); white-space:nowrap; width:1%}
-.q td.v{color:var(--ink)}
-.q h3{font-size:12px; letter-spacing:.14em; text-transform:uppercase; color:var(--dim); margin:22px 0 8px; font-weight:500}
-.q .empty{color:var(--dim); font-size:12px; padding:12px}
+:root{--dim:#a0adbd;--accent2:var(--accent)}
+main{gap:16px}h1,.sub{margin:0}
+.source,.results,.q,.options,.notice{width:100%;max-width:1180px}
+.source textarea{min-height:144px;padding:16px}
+.results{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+.result:first-child{grid-column:1/-1;border-color:var(--accent)}
+.pane header{padding:8px 16px;gap:8px;font-size:14px;letter-spacing:0;text-transform:none;min-height:48px}
+.pane header h2{font-size:14px;font-weight:600;margin:0;color:var(--ink)}
+.hint{margin:0;padding:8px 16px;color:var(--dim);font-size:14px}
+.out{min-height:96px;max-height:240px;padding:16px;font-size:14px;overflow-wrap:anywhere}
+.out.error{color:var(--err)}
+.options{border:1px solid var(--line);border-radius:8px;padding:8px 16px}
+summary{cursor:pointer;min-height:32px;line-height:32px;color:var(--dim)}
+summary:hover{color:var(--ink)}summary:active{opacity:.8}
+.settings{display:flex;flex-wrap:wrap;gap:8px 24px;padding:8px 0}
+label{min-height:32px;font-size:14px;gap:8px}
+button{min-width:64px;min-height:32px;font-size:14px;border-radius:8px;transition:transform .1s ease-out,opacity .15s ease-out}
+button:disabled{opacity:.45;cursor:default;transform:none;filter:none}
+button.ghost:hover:not(:disabled){border-color:var(--accent)}
+:focus-visible{outline:2px solid var(--accent);outline-offset:4px}
+textarea:focus-visible{outline-offset:-4px}
+textarea::placeholder{color:var(--dim)}
+.notice{font-size:14px;color:var(--dim);margin:0}
+.status{margin:0;min-height:24px;font-size:14px;transition:opacity .15s ease-out}
+.q{overflow:auto}.q h2{font-size:14px;font-weight:600;margin:0 0 8px;overflow-wrap:anywhere}
+.q table{width:100%;border-collapse:collapse;background:var(--panel)}
+.q th,.q td{padding:8px 16px;border:1px solid var(--line);text-align:left;overflow-wrap:anywhere;font-size:14px}
+.q td:first-child{width:20%}.side .foot{color:var(--dim)}
+@media(max-width:760px){
+  .results{grid-template-columns:1fr}.source textarea,.out{font-size:15px}
+  button,summary,label,.side a{min-height:44px}summary{line-height:44px}
+  .pane header{flex-wrap:wrap}.hint{font-size:15px}
+}
+@media(prefers-reduced-motion:reduce){*,*::before,*::after{transition:none!important}}
 </style>
 </head>
 <body>
 <div class="app">
-  <nav class="side">
+  <nav class="side" aria-label="工具导航">
     <div class="brand"><b>TOOLS</b> 工具箱</div>
     <a href="index.html"><span class="tag">⌂</span>全部工具</a>
     <a href="sql-in.html"><span class="tag">SQL</span>IN 转换器</a>
     <a href="json.html"><span class="tag">{}</span>JSON 格式化</a>
-    <a href="url.html" class="on"><span class="tag">%</span>URL 转义</a>
+    <a href="url.html" class="on" aria-current="page"><span class="tag">%</span>URL 转换</a>
     <a href="timestamp.html"><span class="tag">T</span>时间戳转换</a>
     <div class="foot">单文件 / 纯本地<br>无依赖 · 无上传</div>
   </nav>
-
   <main>
-    <h1>URL <span>转义</span></h1>
-    <div class="sub">选好模式，左贴右取 —— 顺带拆查询参数（含 # 路由）与 &amp;amp; 反转义</div>
-
-    <div class="bar">
-      <label>模式
-        <select id="mode">
-          <option value="component">encodeURIComponent（参数值）</option>
-          <option value="uri" selected>encodeURI（整条 URL）</option>
-          <option value="decode">decodeURIComponent（解码）</option>
-          <option value="html">HTML 实体转义</option>
-          <option value="htmlDecode">HTML 实体反转义（&amp;amp; → &amp;）</option>
-        </select>
-      </label>
-      <label><input type="checkbox" id="plus" checked> 空格转 + / + 转空格</label>
-      <label><input type="checkbox" id="ent" checked> 顺带反转义 &amp;amp;</label>
-      <label><input type="checkbox" id="parsed" checked> 解析查询参数表</label>
-    </div>
-
-    <div class="wrap">
-      <section class="pane">
-        <header><span>输入</span><b id="state">等待输入</b></header>
-        <textarea id="input" spellcheck="false" placeholder="https://a.com/s?q=中文 关键词&t=1
-或者粘 %E4%B8%AD%E6%96%87"></textarea>
-      </section>
-      <section class="pane">
-        <header><span>输出</span><button class="ghost" id="copy" style="padding:3px 12px;font-size:11px">复制</button></header>
-        <pre class="out" id="output"><em>实时转换…</em></pre>
-      </section>
-    </div>
-
+    <h1>URL <span>转换</span></h1>
+    <p class="sub">粘贴一次，直接比较和复制。自动还原放在最前面。</p>
+    <section class="pane source">
+      <header><label for="input">输入 URL 或文本</label><span id="state">等待输入</span></header>
+      <textarea id="input" spellcheck="false" placeholder="粘贴 URL、带 \u0026 / &amp;amp; 的链接，或 % 编码文本…"></textarea>
+    </section>
+    <details class="options">
+      <summary>转换选项</summary>
+      <div class="settings">
+        <label><input type="checkbox" id="ent" checked>还原 JSON / Unicode 和 HTML 转义</label>
+        <label><input type="checkbox" id="plus">表单格式：空格 ↔ +（编码 / 解码结果）</label>
+        <label><input type="checkbox" id="parsed" checked>显示查询参数表</label>
+      </div>
+    </details>
+    <p class="notice" id="notice">粘贴后生成全部结果；每项都可以直接复制。</p>
+    <div class="results" id="results"></div>
+    <span class="status" id="status" role="status" aria-live="polite"></span>
     <section class="q" id="qbox" hidden>
-      <h3 id="qtitle">查询参数</h3>
+      <h2 id="qtitle">查询参数</h2>
       <div id="qbody"></div>
     </section>
-
-    <span class="status" id="status"></span>
   </main>
 </div>
-
 <script>
 const $ = id => document.getElementById(id);
-const input = $('input'), output = $('output'), state = $('state'), status = $('status');
-
+const input = $('input'), state = $('state'), status = $('status');
 const HTML = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
 const unHTML = { amp: '&', lt: '<', gt: '>', quot: '"', '#39': "'", apos: "'", nbsp: '\u00a0' };
-const ENT = /&(?:amp|lt|gt|quot|apos|nbsp|#39);/i;
+const esc = s => String(s).replace(/[&<>"']/g, c => HTML[c]);
 
-// HTML 实体反转义：命名实体 + &#39; + &#x27;
 function decodeEntities(s) {
-  return String(s).replace(/&(#x?[0-9a-f]+|[a-z]+);/gi, (m, body) => {
-    if (body[0] === '#') {
-      const hex = body[1] === 'x' || body[1] === 'X';   // body 形如 "#x42"，x 在第二位
-      const n = parseInt(body.slice(hex ? 2 : 1), hex ? 16 : 10);
-      return Number.isFinite(n) && n > 0 && n <= 0x10FFFF ? String.fromCodePoint(n) : m;
-    }
-    const k = body.toLowerCase();
-    return k in unHTML ? unHTML[k] : m;
+  return s.replace(/&(#x[0-9a-f]+|#\d+|[a-z]+);/gi, (m, body) => {
+    if (body[0] !== '#') return Object.hasOwn(unHTML, body.toLowerCase()) ? unHTML[body.toLowerCase()] : m;
+    const hex = /^#x/i.test(body);
+    const n = parseInt(body.slice(hex ? 2 : 1), hex ? 16 : 10);
+    return n > 0 && n <= 0x10FFFF && !(n >= 0xD800 && n <= 0xDFFF) ? String.fromCodePoint(n) : m;
   });
 }
 
+// 每次只还原一层文本转义；不递归展开参数值。
+function restoreText(s, steps) {
+  const before = s;
+  if (s.startsWith('"') && s.endsWith('"')) {
+    try { const value = JSON.parse(s); if (typeof value === 'string') s = value; } catch { /* 保留不完整 JSON */ }
+  } else {
+    s = s.replace(/\\(?:u([0-9a-f]{4})|([\\/]))/gi, (m, hex, slash) => hex ? String.fromCharCode(parseInt(hex, 16)) : slash);
+  }
+  if (s !== before) steps.push('JSON / Unicode 转义已还原');
+  const decoded = decodeEntities(s);
+  if (decoded !== s) steps.push('HTML 实体已还原');
+  return decoded;
+}
+
+const isURL = s => /^(?:[a-z][a-z0-9+.-]*:\/\/|\/\/|[/?#])/i.test(s);
+const isQuery = s => /^[^\s=&?#]+=[\s\S]*/.test(s);
+const encodedURL = s => /^(?:https?%|%2f|%3f|%23|%25(?:2f|3f|23))/i.test(s);
+
+function normalize(raw, restore = true) {
+  const steps = [];
+  let text = raw.trim();
+  if (restore) text = restoreText(text, steps);
+  // 仅剥离整条链接外面的百分号编码。识别到 URL / query 后立即停止，
+  // 保留值内的 %26、%3D、%23、%2B、%25，避免改写参数边界或签名。
+  for (let depth = 0; depth < 3 && !isURL(text) && !isQuery(text) && /%[0-9a-f]{2}/i.test(text); depth++) {
+    let decoded;
+    try { decoded = decodeURIComponent(text); }
+    catch { steps.push('百分号编码不完整或不是有效 UTF-8，已保留原文'); break; }
+    const whole = encodedURL(text) || isURL(decoded) || isQuery(decoded);
+    if (depth > 0 && !whole) break;
+    text = decoded;
+    steps.push(whole ? '整条链接已解码一层' : '百分号文本已解码一层');
+    if (restore) text = restoreText(text, steps);
+    if (!whole) break;
+  }
+  return { text, steps };
+}
+
+// 保留已有的合法 %XX，避免整条 URL 编码时把 %26 变成 %2526。
+function encodeURL(s) {
+  return s.split(/(%[0-9a-f]{2})/gi).map(part => /^%[0-9a-f]{2}$/i.test(part) ? part : encodeURI(part)).join('');
+}
+
+const formats = [
+  ['normal', '自动还原', '还原复制时的转义；保留 URL 参数值内的 % 编码与 +。'],
+  ['uri', '整条 URL 编码', '保留 : / ? & = # 等结构；编码空格和中文，保留已有 %XX。'],
+  ['component', '作为参数值编码', '把整个结果放进另一个链接的参数值时使用。'],
+  ['decode', '百分号解码 · 阅读用', '展开所有 %XX；可能改变参数边界，请勿直接替换原链接。'],
+  ['html', 'HTML 实体转义', '将原始输入中的 & < > 和引号转成实体，用于 HTML。'],
+  ['htmlDecode', '仅 HTML 实体还原', '只处理原始输入中的 &amp; / &#38; 等实体。'],
+];
+$('results').innerHTML = formats.map(([id, title, hint]) => '<section class="pane result">'
+  + '<header><h2>' + esc(title) + '</h2><button class="ghost" id="copy-' + id + '" aria-label="复制' + esc(title) + '" disabled>复制</button></header>'
+  + '<p class="hint">' + esc(hint) + '</p><pre class="out" id="out-' + id + '">等待粘贴输入…</pre></section>').join('');
+
 function convert() {
   const raw = input.value;
+  const normalized = normalize(raw, $('ent').checked);
+  const src = normalized.text;
   const plus = $('plus').checked;
-  if (!raw) { state.textContent = '等待输入'; output.innerHTML = '<em>实时转换…</em>'; qbox.hidden = true; return; }
-  const mode = $('mode').value;
-  let src = mode === 'uri' ? raw : raw.trim();
-  // 从 HTML 页面/日志里复制来的 URL 常带 &amp;，先还原再按模式处理
-  if ($('ent').checked && mode !== 'html' && mode !== 'htmlDecode') src = decodeEntities(src);
-
-  let text;
-  try {
-    if (mode === 'component') {
-      text = encodeURIComponent(src);
-      if (plus) text = text.replace(/%20/g, '+');
-    } else if (mode === 'uri') {
-      text = encodeURI(src);
-      if (plus) text = text.replace(/%20/g, '+');
-    } else if (mode === 'decode') {
-      text = decodeURIComponent(plus ? src.replace(/\+/g, ' ') : src);
-    } else if (mode === 'htmlDecode') {
-      text = decodeEntities(src);
-    } else {
-      text = src.replace(/[&<>"']/g, c => HTML[c]);
+  const conversions = {
+    normal: () => src,
+    uri: () => { const s = encodeURL(src); return plus ? s.replace(/%20/g, '+') : s; },
+    component: () => { const s = encodeURIComponent(src); return plus ? s.replace(/%20/g, '+') : s; },
+    decode: () => decodeURIComponent(plus ? src.replace(/\+/g, ' ') : src),
+    html: () => esc(raw.trim()),
+    htmlDecode: () => decodeEntities(raw.trim()),
+  };
+  state.textContent = src ? raw.length + ' 字符 · 6 种结果' : '等待输入';
+  status.className = 'status'; status.textContent = '';
+  $('notice').textContent = !src ? '粘贴后生成全部结果；每项都可以直接复制。'
+    : normalized.steps.length ? [...new Set(normalized.steps)].join('；')
+    : isURL(src) || isQuery(src) ? '已识别 URL / 查询参数，自动还原结果保留现有参数编码。'
+    : '未发现需要还原的转义，原文已保留；请按用途复制下方结果。';
+  for (const [id] of formats) {
+    const out = $('out-' + id), button = $('copy-' + id);
+    out.className = 'out'; button.disabled = !src; button.textContent = '复制';
+    button.title = src ? '复制此结果' : '请先粘贴输入';
+    try { out.textContent = src ? conversions[id]() : '等待粘贴输入…'; }
+    catch {
+      out.textContent = '无法转换：请检查 %XX 是否完整、是否为有效 UTF-8，以及 Unicode 字符是否完整。其他结果仍可复制。';
+      out.className = 'out error'; button.disabled = true; button.title = '请先修正编码错误';
     }
-    status.className = 'status';
-  } catch (e) {
-    text = '';
-    status.className = 'status on err';
-    status.textContent = '解码失败：URI malformed（% 后面不是合法两位十六进制）';
   }
-
-  output.textContent = text;
-  state.textContent = '输出 ' + text.length + ' 字符';
-
-  // 查询参数表：一直跟着「输入」走，而不是跟着输出（输出常常是转义后的形式）
-  const p = $('parsed').checked ? parseURL(raw) : null;
-  qbox.hidden = !p;
+  const p = src && $('parsed').checked ? parseURL(src) : null;
+  $('qbox').hidden = !p;
   if (p) renderQuery(p);
 }
 
-/* 解析查询参数：普通 query → hash 路由里的 query → 裸 query string
-   顺带处理粘贴时被转义的 &amp;（从 HTML 页面/日志里复制常带这个） */
-function parseURL(text) {
-  let s = text.trim();
-  const hadEnt = ENT.test(s);
-  if (hadEnt) s = decodeEntities(s);              // 不处理的话会拆出 "amp;orderId"
+// 参数表只读取自动还原结果；先分隔参数，再解码各个值。
+function parseURL(s) {
   try {
-    const isAbs = /^[a-z][a-z0-9+.-]*:\/\//i.test(s) || /^\/\//.test(s);
     let u = null, qs = '', where = 'query';
-    if (isAbs || /[/?#]/.test(s)) {
-      u = isAbs ? new URL(s) : new URL(s, 'http://x/');
+    if (isQuery(s)) { qs = s; where = 'raw'; }
+    else if (isURL(s) || /[/?#]/.test(s)) {
+      u = new URL(s, 'https://url-tool.invalid/');
       qs = u.search.slice(1);
-      if (!qs) {                                   // SPA 把参数放在 # 后面：/v1/#/page?a=1&b=2
+      if (!qs) {
         const hi = u.hash.indexOf('?');
         if (hi >= 0) { qs = u.hash.slice(hi + 1); where = 'hash'; }
       }
     }
-    if (!qs && /=/.test(s)) { qs = s.replace(/^[?#]/, ''); where = 'raw'; }
     const params = [...new URLSearchParams(qs)];
     if (!params.length) return null;
-    return {
-      base: u && u.origin !== 'http://x' ? u.origin : '',
-      path: u ? u.pathname : '',
-      route: u && u.hash && where === 'hash' ? u.hash.slice(0, u.hash.indexOf('?')) : '',
-      params, where, hadEnt,
-    };
+    return { params, where };
   } catch { return null; }
 }
-function esc(s) { return String(s).replace(/[&<>"]/g, c => HTML[c]); }
+
 function renderQuery(p) {
-  const loc = (p.base || p.path !== '/' ? (p.base + p.path) : '') + (p.route || '');
-  const tags = p.where === 'hash' ? '（# 路由内）' : p.where === 'raw' ? '（裸 query）' : '';
-  $('qtitle').textContent = (loc ? loc + ' · ' : '') + p.params.length + ' 个参数' + tags;
-  if (p.hadEnt) $('qtitle').textContent += ' · 已反转义 &amp;';
-  $('qbody').innerHTML = '<table><thead><tr><th>key</th><th>value</th></tr></thead><tbody>'
-    + p.params.map(([k, v]) => `<tr><td class="k">${esc(k)}</td><td class="v">${esc(v)}</td></tr>`).join('')
-    + '</tbody></table>';
+  const location = p.where === 'hash' ? ' · # 路由内' : p.where === 'raw' ? ' · 裸 query' : '';
+  $('qtitle').textContent = p.params.length + ' 个查询参数' + location + '（值按表单规则解码，+ 显示为空格）';
+  $('qbody').innerHTML = '<table><thead><tr><th scope="col">参数</th><th scope="col">值</th></tr></thead><tbody>'
+    + p.params.map(([k, v]) => '<tr><td>' + esc(k) + '</td><td>' + esc(v) + '</td></tr>').join('') + '</tbody></table>';
 }
 
+for (const [id, title] of formats) {
+  $('copy-' + id).addEventListener('click', async () => {
+    const text = $('out-' + id).textContent;
+    try {
+      try { await navigator.clipboard.writeText(text); }
+      catch {
+        const area = document.createElement('textarea');
+        area.value = text; area.style.position = 'fixed'; area.style.opacity = '0';
+        document.body.append(area); area.select();
+        try { if (!document.execCommand('copy')) throw new Error('copy failed'); }
+        finally { area.remove(); $('copy-' + id).focus(); }
+      }
+      for (const [other] of formats) $('copy-' + other).textContent = '复制';
+      $('copy-' + id).textContent = '已复制';
+      status.className = 'status on'; status.textContent = '已复制：' + title;
+    } catch {
+      status.className = 'status on err'; status.textContent = '复制失败，请选中对应结果后手动复制。';
+    }
+  });
+}
 input.addEventListener('input', convert);
-$('mode').addEventListener('change', convert);
-$('plus').addEventListener('change', convert);
-$('ent').addEventListener('change', convert);
-$('parsed').addEventListener('change', convert);
-
-$('copy').addEventListener('click', async () => {
-  const text = output.textContent;
-  if (!text || text.startsWith('实时转换')) return;
-  try { await navigator.clipboard.writeText(text); }
-  catch {
-    const r = document.createRange(); r.selectNodeContents(output);
-    const sel = getSelection(); sel.removeAllRanges(); sel.addRange(r);
-    document.execCommand('copy'); sel.removeAllRanges();
-  }
-  status.className = 'status on';
-  status.textContent = '已复制';
-});
-
-// 自检
-(function selfTest() {
-  const ok = (cond, msg, got) => console.assert(cond, msg, got);
-  const type = s => { input.value = s; convert(); return output.textContent; };
-
-  // 页面初始默认值（必须在改动任何控件之前断言）
-  ok($('mode').value === 'uri', 'default mode is encodeURI', $('mode').value);
-  ok($('plus').checked && $('ent').checked && $('parsed').checked, 'default checkboxes on', '');
-
-  // 自检会来回改控件，先把初始状态存下来，跑完原样还原，免得用户首屏看到被改过的默认值
-  const initial = { mode: $('mode').value, plus: $('plus').checked, ent: $('ent').checked, parsed: $('parsed').checked, input: input.value };
-
-  $('mode').value = 'component'; $('plus').checked = false;
-  ok(type('a b&c=d/中') === 'a%20b%26c%3Dd%2F%E4%B8%AD', 'component', output.textContent);
-  $('plus').checked = true;
-  ok(type('a b') === 'a+b', 'component+space', output.textContent);
-  ok(type('a+b') === 'a%2Bb', 'component+literal-plus', output.textContent);
-  input.value = 'a+b%20c'; $('mode').value = 'decode'; convert();
-  ok(output.textContent === 'a b c', 'decode', output.textContent);
-  $('mode').value = 'uri'; $('plus').checked = false;
-  ok(type('https://a.com/s?q=中文 词&t=1') === 'https://a.com/s?q=%E4%B8%AD%E6%96%87%20%E8%AF%8D&t=1', 'uri', output.textContent);
-  $('mode').value = 'html';
-  ok(type('<a href="x">&') === '&lt;a href=&quot;x&quot;&gt;&amp;', 'html', output.textContent);
-  $('mode').value = 'decode';
-  ok(type('%E4%B8%AD') === '中', 'decode-utf8', output.textContent);
-
-  // 参数表
-  $('mode').value = 'component'; $('plus').checked = true; $('parsed').checked = true;
-  input.value = 'https://a.com/s?q=%E4%B8%AD%E6%96%87&t=1&t=2'; convert();
-  const rows = [...document.querySelectorAll('#qbody tr')].map(tr => tr.textContent);
-  ok(!qbox.hidden && rows.join('|').includes('中文'), 'query table', rows.join('|'));
-  ok(document.querySelectorAll('#qbody tbody tr').length === 3, 'query rows', rows.length);
-
-  // HTML 实体反转义
-  $('mode').value = 'htmlDecode';
-  ok(type('a&amp;b&lt;c&gt;&quot;d&#39;e&nbsp;f') === 'a&b<c>"d\'e\u00a0f', 'htmlDecode', JSON.stringify(output.textContent));
-  ok(type('&#65;&#x42;&#x4e2d;') === 'AB中', 'htmlDecode numeric', output.textContent);
-  ok(type('&unknown; &amp') === '&unknown; &amp', 'htmlDecode leaves bad entities', output.textContent);
-
-  // hash 路由里的 query + &amp;（用户实际那一条）
-  $('mode').value = 'component'; $('ent').checked = true; $('parsed').checked = true;
-  input.value = 'https://m.quanmaigo.com/v1/#/transferPage?appId=3&amp;orderId=20261014114050361598&amp;timestamp=1791949251&amp;brandId=1552&amp;sign=18ae59561f148996beb2ba192c24f6f2&amp;extra=qxfl';
-  convert();
-  const keys = [...document.querySelectorAll('#qbody td.k')].map(td => td.textContent);
-  const vals = [...document.querySelectorAll('#qbody td.v')].map(td => td.textContent);
-  ok(!qbox.hidden, 'hash route table shown', '');
-  ok(keys.join(',') === 'appId,orderId,timestamp,brandId,sign,extra', 'hash keys (no amp;)', keys.join(','));
-  ok(!keys.some(k => k.includes('amp;')), 'no amp; in keys', keys.join(','));
-  ok(vals[1] === '20261014114050361598' && vals[5] === 'qxfl', 'hash values', vals.join(','));
-  ok($('qtitle').textContent.includes('已反转义'), 'entity badge', $('qtitle').textContent);
-  // 编码结果里 &amp; 已还原成 &，被正确编码为 %26
-  ok(output.textContent.includes('%26orderId'), 'amp decoded before encode', output.textContent);
-
-  // 关掉实体反转义时保持原样（用户想看到原始内容）；& 被编码成 %26，"amp;" 原样保留
-  $('ent').checked = false; convert();
-  ok(output.textContent.includes('%26amp%3BorderId'), 'entity toggle off', output.textContent.slice(0, 120));
-  $('ent').checked = true;
-
-  // 普通 query 与 SPA hash 互不干扰
-  input.value = 'https://a.com/p?x=1#/route?y=2'; convert();
-  const k2 = [...document.querySelectorAll('#qbody td.k')].map(td => td.textContent);
-  ok(k2.join(',') === 'x', 'search wins over hash', k2.join(','));
-
-  // 还原首屏状态
-  $('mode').value = initial.mode; $('plus').checked = initial.plus;
-  $('ent').checked = initial.ent; $('parsed').checked = initial.parsed;
-  input.value = initial.input; convert();
-  ok($('mode').value === 'uri', 'default restored after self-test', $('mode').value);
-})();
+for (const id of ['ent', 'plus', 'parsed']) $(id).addEventListener('change', convert);
+convert();
 </script>
 </body>
 </html>
